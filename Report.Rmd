@@ -1,0 +1,123 @@
+---
+title: "Weight Lifting Exercise Recognition - Simple Machine Learning Approach^[
+This report is a result of the assingment of *Practical Machine Learning*
+course in Coursera.]"
+author: "Joo-Won Jung"
+date: "2015-07-26"
+output:
+  html_document:
+    theme: journal
+---
+
+In this report,
+we present a process of building a model to distinguish
+whether an weight liftging motion is correct for exercise specification or not
+by the signals from four sensors.
+We used data provided by coursework, which is cited from http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises.
+We build a random forest model whose out of sample error is expeced to be low.
+
+```{r,parallel,include=FALSE}
+library(doParallel); library(caret)
+registerDoParallel(cores = detectCores())
+```
+
+The dataset provided is consist of sensor data,
+whether the exercise activity is correct or how it is incorrect (```classe```),
+the target id, etc.
+*Practical Machine Learning* course provided the dataset into two parts,
+```pml-training.csv``` and ```pml-testing.csv```.
+In ```pml-testing.csv``` data set, there is no ```classe``` variable,
+in order for us to predict the activity *classe*.
+Therefore, we use only ```pml-training.csv``` data to build a model and
+model testing.
+
+
+## Data preparation and clensing
+We first clean up the given data since there are so many blank values
+and unrelated to the activity classe.
+from the first column to seventh columns are the data
+about the data gathering environment. So, we can remove it safely.
+And we remove the columns with NAs in the first row.
+```{r,dataClensing,cache=TRUE}
+library(caret)
+pml <- read.csv("pml-training.csv", na.strings = c("NA", "", "#DIV/0!"))
+pml <- subset(pml, select = -c(1:7))
+pml <- pml[,apply(pml[1,], 2, function(x) {!is.na(x)})]
+```
+
+
+## Training and testing set
+We split the ```pml-training``` data into training set and test set
+to make a model and test.
+We split it by 3/4 for training and 1/4 for testing.
+```{r,cache=TRUE}
+set.seed(123)
+inTrain <- createDataPartition(pml$classe, p=0.75, list=FALSE)
+training <- pml[inTrain,]
+testing <- pml[-inTrain,]
+```
+
+## Cross validation setting and training
+We set 3-fold cross validation for training control.
+And we build random forest model from the training set above.
+```{r,cache=TRUE}
+set.seed(123)
+tc <- trainControl(method = "cv", number = 3, repeats = 3 )
+rfFit3 <- train(classe ~ ., data=training, trControl = tc, method="rf")
+```
+
+## In sample error rate
+After training step we can find the accuracy of the model built as follows.
+```{r,cache=TRUE}
+rfFit3$results
+```
+In-sample error rate is (1 - accuracy).
+Generally, in-sample error rate is smaller than out-of-sample error.
+Therfore, we expect that out-of-sample error would be over 
+`r 1 - max(rfFit3$results$Accuracy)`.
+
+## Test the model and out-of-sample error
+We test the random forest model using the training set prepared eailer.
+```{r,results='hide'}
+rfPred3 <- predict(rfFit3, newdata = testing)
+```
+```{r}
+cm <- confusionMatrix(rfPred3, testing$classe)
+cm
+```
+Surprisingly, the out-of-sample error rate is
+`r 1 - cm$overall['Accuracy']` which is lower than the in-sample error rate.
+
+## Answer the question
+Now we can answer the question as follows.
+To protect the coursework system we do not reveal the answers.
+As a result, our answers are all correct, which means the error rate is zero!!
+```{r,eval=FALSE}
+problems <- read.csv("pml-testing.csv")
+answers <- predict(rfFit3, newdata = problems)
+```
+
+## Conclusion
+We have presented a model builing process.
+We have gotten random forest model with very high accuacy.
+
+# Appendix
+## Learning in parallel
+To speed up the machine learning procedures,
+you may enable parallel features of R as follows.
+```{r,parallel,eval=FALSE}
+```
+
+## Important features
+As a result of random forest learning,
+we could get 20 most important features (predictors) as follows.
+```{r}
+varImp(rfFit3)
+```
+
+The graph of first two features and outcome *classe* variable
+shows that there may be a way to make simple model.
+```{r,echo=FALSE}
+g <- qplot(roll_belt, pitch_arm, data=training, col=classe, alpha=0.1)
+g + scale_alpha(guide = 'none')
+```
